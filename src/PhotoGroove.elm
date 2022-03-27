@@ -1,4 +1,4 @@
-port module PhotoGroove exposing (main)
+port module PhotoGroove exposing (Model, Msg(..), Photo, Status(..), initialModel, main, photoDecoder, photoFromUrl, update, urlPrefix, view)
 
 import Browser
 import Html exposing (Attribute, Html, button, canvas, div, h1, h3, img, input, label, node, text)
@@ -26,6 +26,7 @@ type Msg
     = ClickedPhoto String
     | ClickedSurpriseMe
     | SelectThumbnailSize ThumbnailSize
+    | GotActivity String
     | GotRandomPhoto Photo
     | GotPhotos (Result Http.Error (List Photo))
     | SlidHue Int
@@ -65,6 +66,7 @@ viewLoaded : List Photo -> String -> Model -> List (Html Msg)
 viewLoaded photos selectedUrl model =
     [ h1 [] [ text (sizeToString model.chosenSize) ]
     , button [ onClick ClickedSurpriseMe ] [ text "Surprise Me!" ]
+    , div [ class "activity" ] [ text model.activity ]
     , div [ class "filters" ]
         [ viewFilter SlidHue "Hue" model.hue
         , viewFilter SlidRipple "Ripple" model.ripple
@@ -110,6 +112,9 @@ sizeToString size =
 port setFilters : FilterOptions -> Cmd msg
 
 
+port activityChanges : (String -> msg) -> Sub msg
+
+
 type alias FilterOptions =
     { url : String
     , filters : List { name : String, amount : Float }
@@ -139,6 +144,7 @@ type Status
 
 type alias Model =
     { status : Status
+    , activity : String
     , chosenSize : ThumbnailSize
     , hue : Int
     , ripple : Int
@@ -149,6 +155,7 @@ type alias Model =
 initialModel : Model
 initialModel =
     { status = Loading
+    , activity = ""
     , chosenSize = Small
     , hue = 5
     , ripple = 5
@@ -174,6 +181,9 @@ update msg model =
 
         SelectThumbnailSize size ->
             ( { model | chosenSize = size }, Cmd.none )
+
+        GotActivity activity ->
+            ( { model | activity = activity }, Cmd.none )
 
         GotRandomPhoto photo ->
             applyFilters { model | status = selectUrl photo.url model.status }
@@ -244,14 +254,28 @@ initialCmd =
         }
 
 
-main : Program () Model Msg
+main : Program Float Model Msg
 main =
     Browser.element
-        { init = \_ -> ( initialModel, initialCmd )
+        { init = init
         , view = view
         , update = update
-        , subscriptions = \_ -> Sub.none
+        , subscriptions = subscriptions
         }
+
+
+init : Float -> ( Model, Cmd Msg )
+init flags =
+    let
+        activity =
+            "Initializing Pasta v" ++ String.fromFloat flags
+    in
+    ( { initialModel | activity = activity }, initialCmd )
+
+
+subscriptions : Model -> Sub Msg
+subscriptions _ =
+    activityChanges GotActivity
 
 
 rangeSlider : List (Html.Attribute msg) -> List (Html msg) -> Html msg
@@ -264,3 +288,11 @@ onSlide toMsg =
     at [ "detail", "userSlidTo" ] int
         |> Json.Decode.map toMsg
         |> on "slide"
+
+
+photoFromUrl : String -> Photo
+photoFromUrl url =
+    { url = url
+    , size = 0
+    , title = ""
+    }
